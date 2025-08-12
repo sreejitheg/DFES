@@ -1,0 +1,117 @@
+# Build a minimal, clean multi‑user AI chat web app (Replit)
+
+**Goal**: Generate a production‑ready minimal web app that displays *group* conversations with a single AI assistant (call sign configurable, e.g., "Alpha 1"). The UI renders messages coming from a backend (via webhooks) and lets the local user send *text* or *voice* to different outbound webhooks. Only backend messages are shown in the transcript. Theme is monochrome (black/white/gray).
+
+---
+
+## Tech + Framework
+
+* Node.js + Express for backend API
+* Vanilla JS + HTML + CSS (Tailwind optional) for frontend
+* In-memory store for messages
+* Server-Sent Events (SSE) for real-time updates
+
+---
+
+## Environment Variables (.env)
+
+```
+ASSISTANT_CALLSIGN="Alpha 1"
+TEXT_WEBHOOK_URL="https://example.com/text-in"
+VOICE_WEBHOOK_URL="https://example.com/voice-in"
+INCOMING_WEBHOOK_SECRET="replace-me" # optional
+```
+
+---
+
+## Data Model
+
+Incoming messages from backend (n8n) will be posted to `/api/incoming`:
+
+```json
+{
+  "user": "Control",
+  "message": "Control to Echo 1, status updated.",
+  "audioUrl": "https://...",  // optional
+  "ts": "2025-08-12T04:12:33Z", // optional
+  "type": "text"                // or "voice"
+}
+```
+
+---
+
+## Endpoints
+
+**POST /api/incoming**
+
+* Accepts `user`, `message` or `audioUrl`, `ts`, `type`
+* Validates optional `INCOMING_WEBHOOK_SECRET`
+* Stores message in memory and broadcasts via SSE
+
+**GET /api/stream**
+
+* Streams new messages to clients as they arrive
+
+**POST /api/send-text**
+
+* Sends typed message to `TEXT_WEBHOOK_URL`
+
+**POST /api/send-voice**
+
+* Sends recorded audio to `VOICE_WEBHOOK_URL`
+
+---
+
+## UI/UX
+
+* Single-column chat window
+* Messages aligned right if `user === ASSISTANT_CALLSIGN`, else left
+* Each message: `HH:mm:ss • USER • message`
+* Push-to-talk mic button for recording
+* Haptic feedback for button press/release (mobile)
+* Auto-play audio messages
+
+---
+
+## Example curl tests
+
+**Test incoming text message:**
+
+```bash
+curl -X POST http://localhost:3000/api/incoming \
+  -H "Content-Type: application/json" \
+  -d '{"user": "Control", "message": "Control to Echo 1, status updated.", "type": "text"}'
+```
+
+**Test incoming voice message:**
+
+```bash
+curl -X POST http://localhost:3000/api/incoming \
+  -H "Content-Type: application/json" \
+  -d '{"user": "Alpha 1", "audioUrl": "https://example.com/audio.mp3", "type": "voice"}'
+```
+
+**Test sending text outbound:**
+
+```bash
+curl -X POST http://localhost:3000/api/send-text \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Acknowledged.", "clientId": "local-user"}'
+```
+
+---
+
+## Acceptance Criteria
+
+* Messages posted to `/api/incoming` appear in UI immediately
+* Outbound text and voice go to respective webhooks
+* Assistant call sign alignment works
+* Voice messages auto-play
+
+---
+
+## Deliverables
+
+* Express server with `/api/incoming`, `/api/stream`, `/api/send-text`, `/api/send-voice`
+* Simple frontend HTML/JS to display chat and send text/voice
+* Ready to run on Replit with `node index.js`

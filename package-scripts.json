@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "deploy": "npm run build && git add . && git commit -m 'Deploy updates' && git push origin main"
+  }
+}

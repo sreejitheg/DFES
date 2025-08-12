@@ -1,0 +1,126 @@
+# Build a minimal, clean multi-user AI chat web app (Replit, **text-only**)
+
+**Goal**: Generate a production-ready minimal web app that displays *group* conversations with a single controller role (e.g., `Control`). The UI renders messages coming from a backend (via webhook to our app) and lets the local user send **text** to an outbound webhook. Only backend messages are shown in the transcript. Theme is **light** (white/gray/black accents).
+
+---
+
+## Tech + Framework
+
+* Node.js + Express for backend API
+* Vanilla JS + HTML + CSS (Tailwind optional) for frontend
+* In-memory store for messages (ring buffer)
+* Server-Sent Events (SSE) for real-time updates
+
+---
+
+## Environment Variables (.env)
+
+```
+ASSISTANT_EVENT="Control"          # If `event === ASSISTANT_EVENT`, render on the RIGHT; otherwise LEFT
+TEXT_WEBHOOK_URL="https://example.com/text-in"  # Outbound text webhook (n8n)
+INCOMING_WEBHOOK_SECRET="replace-me"            # Optional validation for inbound webhook
+```
+
+---
+
+## Data Model (inbound from n8n)
+
+Our app will receive **text-only** JSON at `POST /api/incoming` in this exact shape:
+
+```json
+{
+  "event": "user_echo",
+  "var1": "Control",
+  "var2": "Unit calling Control, please identify.",
+  "sessionId": "",
+  "ts": "2025-08-12T10:47:04.467+08:00"
+}
+```
+
+* `event`: a string; **alignment rule** below uses this.
+* `var1`: speaker label (e.g., "Control", "Echo 1").
+* `var2`: message text.
+* `sessionId`: optional session reference; pass-through only.
+* `ts`: ISO timestamp. If missing, server sets it.
+
+**Alignment rule**:
+
+* If `event === "user_echo"` → **LEFT** aligned.
+* If `event === ASSISTANT_EVENT` (default `"Control"`) → **RIGHT** aligned.
+* All other `event` values default to **LEFT**.
+
+---
+
+## Endpoints
+
+**POST /api/incoming**
+
+* Accepts the JSON above
+* Validates optional `INCOMING_WEBHOOK_SECRET`
+* Normalizes `ts` and pushes to buffer; broadcasts via SSE
+
+**GET /api/stream**
+
+* Streams historical (last 100) + new messages as NDJSON/SSE
+
+**POST /api/send-text**
+
+* Client sends `{ text, clientId }` to this endpoint
+* Server relays to `TEXT_WEBHOOK_URL`
+* **Note**: Local echo is **not** shown; only messages re-posted to `/api/incoming` appear in UI
+
+---
+
+## UI/UX (light theme)
+
+* **Light** palette: white background, gray text, subtle borders/shadows
+* Single-column chat; sticky footer input (text box + Send)
+* Script-style line format: `HH:mm:ss • var1 • var2`
+* LEFT lines: light-gray bubble aligned left; RIGHT lines: darker-gray bubble aligned right
+* Smooth scroll to latest; basic keyboard support (Enter to send)
+* No voice or PTT in this version
+
+---
+
+## Example curl tests
+
+**1) Test incoming user\_echo (LEFT aligned):**
+
+```bash
+curl -X POST http://localhost:3000/api/incoming \
+  -H "Content-Type: application/json" \
+  -d '{"event":"user_echo","var1":"Echo 1","var2":"Echo 1 to Control, status updated.","sessionId":"","ts":"2025-08-12T10:47:04.467+08:00"}'
+```
+
+**2) Test incoming Control (RIGHT aligned):**
+
+```bash
+curl -X POST http://localhost:3000/api/incoming \
+  -H "Content-Type: application/json" \
+  -d '{"event":"Control","var1":"Control","var2":"Acknowledged. Proceed.","sessionId":"","ts":"2025-08-12T10:48:10.000+08:00"}'
+```
+
+**3) Test outbound text relay:**
+
+```bash
+curl -X POST http://localhost:3000/api/send-text \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Test from client","clientId":"local-user"}'
+```
+
+---
+
+## Acceptance Criteria
+
+* Messages POSTed to `/api/incoming` appear instantly, aligned per `event`
+* Submitting text via input triggers `/api/send-text` and does **not** render locally until backend re-emits
+* Timestamps show local `HH:mm:ss` alongside `var1` and `var2`
+* Theme is light, with clear left/right visual distinction
+
+---
+
+## Deliverables
+
+* Express server with `/api/incoming`, `/api/stream`, `/api/send-text`
+* Frontend HTML/JS rendering transcript + input bar
+* Ready for Replit: `node index.js` start script and `.env` support
